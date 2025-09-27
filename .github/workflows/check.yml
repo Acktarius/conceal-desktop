@@ -340,10 +340,10 @@ jobs:
           arch -x86_64 lrelease src/languages/*.ts || true
           mkdir -p "$build_folder"
           cd "$build_folder"
-          arch -x86_64 cmake ../.. -DCMAKE_BUILD_TYPE=Release -DBOOST_ROOT=$(/usr/local/bin/brew --prefix boost@1.85) -DCMAKE_OSX_ARCHITECTURES="x86_64"
-          arch -x86_64 make -j3 
-          arch -x86_64 macdeployqt "$app_name"
-          arch -x86_64 cpack
+          arch -x86_64 /usr/local/bin/cmake ../.. -DCMAKE_BUILD_TYPE=Release -DBOOST_ROOT=$(/usr/local/bin/brew --prefix boost@1.85) -DCMAKE_OSX_ARCHITECTURES="x86_64"
+          arch -x86_64 /usr/local/bin/make -j3 
+          arch -x86_64 $(/usr/local/bin/brew --prefix qt@5)/bin/macdeployqt "$app_name"
+          arch -x86_64 /usr/local/bin/cpack
           mkdir "$release_name"
           mv *.dmg "$release_name".dmg
           mv "$release_name".dmg "$release_name"
