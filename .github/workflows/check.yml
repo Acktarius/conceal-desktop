@@ -318,7 +318,7 @@ jobs:
           arch -x86_64 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
           # Install packages
           arch -x86_64 /usr/local/bin/brew install boost@1.85 qt@5
-          arch -x86_64 /usr/local/bin/brew install cmake cpack
+          arch -x86_64 /usr/local/bin/brew install cmake
 
       - name: Clone conceal-core
         run: |
