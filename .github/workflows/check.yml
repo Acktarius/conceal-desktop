@@ -318,7 +318,7 @@ jobs:
           arch -x86_64 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
           # Install packages
           arch -x86_64 /usr/local/bin/brew install boost@1.85 qt@5
-          arch -x86_64 /usr/local/bin/brew install cmake make
+          arch -x86_64 /usr/local/bin/brew install cmake cpack
 
       - name: Clone conceal-core
         run: |
@@ -341,7 +341,7 @@ jobs:
           mkdir -p "$build_folder"
           cd "$build_folder"
           arch -x86_64 /usr/local/bin/cmake ../.. -DCMAKE_BUILD_TYPE=Release -DBOOST_ROOT=$(/usr/local/bin/brew --prefix boost@1.85) -DCMAKE_OSX_ARCHITECTURES="x86_64"
-          arch -x86_64 /usr/local/bin/make -j3 
+          arch -x86_64 make -j3 
           arch -x86_64 $(/usr/local/bin/brew --prefix qt@5)/bin/macdeployqt "$app_name"
           arch -x86_64 /usr/local/bin/cpack
           mkdir "$release_name"
