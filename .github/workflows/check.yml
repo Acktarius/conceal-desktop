@@ -314,7 +314,10 @@ jobs:
 
       - name: Install dependencies
         run: |
-          arch -x86_64 brew install boost@1.85 qt@5
+          # Install x86_64 Homebrew
+          arch -x86_64 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          # Install packages
+          /usr/local/bin/brew install boost@1.85 qt@5
 
       - name: Clone conceal-core
         run: |
