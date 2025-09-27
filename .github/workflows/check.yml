@@ -259,8 +259,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  build-macos:
-    name: macOS
+  build-macos-13:
+    name: macOS 13
     runs-on: macos-13
     steps:
       - uses: actions/checkout@master
@@ -281,7 +281,7 @@ jobs:
           export PATH="/usr/local/opt/qt@5/bin:$PATH"
           build_folder="build/release"
           ccx_version=${GITHUB_SHA::7}
-          release_name="ccx-desktop-macOS-dev-$ccx_version"
+          release_name="ccx-desktop-macOS-13-dev-$ccx_version"
           app_name="conceal-desktop.app"
 
           lrelease src/languages/*.ts
@@ -291,6 +291,55 @@ jobs:
           make -j3 
           macdeployqt "$app_name"
           cpack
+          mkdir "$release_name"
+          mv *.dmg "$release_name".dmg
+          mv "$release_name".dmg "$release_name"
+
+          echo "release_name=${release_name}" >> $GITHUB_OUTPUT
+          echo "artifact_path=${build_folder}/${release_name}" >> $GITHUB_OUTPUT
+
+      - name: Upload To GH Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.build.outputs.release_name }}
+          path: ${{ steps.build.outputs.artifact_path }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-macos-15:
+    name: macOS 15
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@master
+
+      - name: Install dependencies
+        run: |
+          arch -x86_64 brew install boost@1.85 qt@5
+
+      - name: Clone conceal-core
+        run: |
+          rm -rf cryptonote
+          git clone https://github.com/ConcealNetwork/conceal-core.git cryptonote
+          ./.github/checkout.sh
+
+      - name: Build
+        id: build
+        run: |
+          export PATH="$(brew --prefix qt@5)/bin:$PATH"
+          export LDFLAGS="-L$(brew --prefix boost@1.85)/lib"
+          export CPPFLAGS="-I$(brew --prefix boost@1.85)/include"
+          build_folder="build/release"
+          ccx_version=${GITHUB_SHA::7}
+          release_name="ccx-desktop-macOS-15-dev-$ccx_version"
+          app_name="conceal-desktop.app"
+
+          arch -x86_64 lrelease src/languages/*.ts
+          mkdir -p "$build_folder"
+          cd "$build_folder"
+          arch -x86_64 cmake ../.. -DCMAKE_BUILD_TYPE=Release -DBOOST_ROOT=$(brew --prefix boost@1.85) -DCMAKE_OSX_ARCHITECTURES="x86_64"
+          arch -x86_64 make -j3 
+          arch -x86_64 macdeployqt "$app_name"
+          arch -x86_64 cpack
           mkdir "$release_name"
           mv *.dmg "$release_name".dmg
           mv "$release_name".dmg "$release_name"
