@@ -262,8 +262,13 @@ elseif (UNIX)
 
     include_directories(/usr/include/malloc)
 
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ARCH_FLAG} -maes -std=c++11 -stdlib=libc++")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c11 ${ARCH_FLAG} -maes -D_DARWIN_C_SOURCE")
+    if(CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ARCH_FLAG} -std=c++11 -stdlib=libc++")
+      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c11 ${ARCH_FLAG} -D_DARWIN_C_SOURCE")
+    else()
+      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ARCH_FLAG} -maes -std=c++11 -stdlib=libc++")
+      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c11 ${ARCH_FLAG} -maes -D_DARWIN_C_SOURCE")
+    endif()
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -framework Cocoa -framework OpenGL -framework CoreFoundation -framework Carbon -framework IOKit -L/usr/lib")
 
     set(MACOSX_BUNDLE_ICON_FILE conceal.icns)
