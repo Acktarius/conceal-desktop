@@ -344,9 +344,9 @@ jobs:
       - name: Patch cryptonote for macOS ARM64
         run: |
           python3 - <<'EOF'
-          import re
+          import re, sys, os
 
-          # hw_detect.hpp: wrap Linux-only headers with #ifdef __linux__
+          # ── 1. hw_detect.hpp: wrap Linux-only headers with #ifdef __linux__ ──
           path = 'cryptonote/src/crypto/pow_hash/hw_detect.hpp'
           with open(path, 'r') as f:
               content = f.read()
@@ -357,8 +357,7 @@ jobs:
           with open(path, 'w') as f:
               f.write(content)
 
-          # cn_slow_hash.hpp: replace the HAS_ARM_HW hw_check_aes() body using regex
-          # (whitespace-agnostic to handle any indentation style in the source)
+          # ── 2. cn_slow_hash.hpp: replace getauxval() with always-true on ARM macOS ──
           path = 'cryptonote/src/crypto/pow_hash/cn_slow_hash.hpp'
           with open(path, 'r') as f:
               content = f.read()
@@ -373,15 +372,128 @@ jobs:
           with open(path, 'w') as f:
               f.write(patched)
 
-          # asm.s is x86-64 only; on ARM64 macOS the system libsystem_platform
-          # already provides _setmcontext/_getmcontext for ucontext functions
-          import os
-          asm = 'cryptonote/src/Platform/OSX/System/asm.s'
-          if os.path.exists(asm):
-              os.remove(asm)
-              print(f"Removed {asm} (x86-64 only, system provides ARM64 equivalent)")
+          # ── 3. Replace x86-64 Platform/OSX/System files with ARM64 equivalents ──
+          platform = 'cryptonote/src/Platform/OSX/System'
 
-          print("Patches applied successfully.")
+          # Context.h — ARM64 mcontext/ucontext layout
+          with open(f'{platform}/Context.h', 'w') as f:
+              f.write("""\
+#pragma once
+
+#define setcontext(u) setmcontext(&(u)->uc_mcontext)
+#define getcontext(u) getmcontext(&(u)->uc_mcontext)
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+#include <signal.h>
+
+typedef struct mcontext mctx;
+typedef struct ucontext uctx;
+
+extern int  swapcontext(uctx*, const uctx*);
+extern void makecontext(uctx*, void(*)(void), intptr_t);
+extern int  getmcontext(mctx*);
+extern void setmcontext(const mctx*);
+
+/* ARM64 machine context — offsets used directly in asm.s */
+struct mcontext {
+    long mc_x0;    /* offset   0 — function arg / restoration return value */
+    long mc_x19;   /* offset   8 */
+    long mc_x20;   /* offset  16 */
+    long mc_x21;   /* offset  24 */
+    long mc_x22;   /* offset  32 */
+    long mc_x23;   /* offset  40 */
+    long mc_x24;   /* offset  48 */
+    long mc_x25;   /* offset  56 */
+    long mc_x26;   /* offset  64 */
+    long mc_x27;   /* offset  72 */
+    long mc_x28;   /* offset  80 */
+    long mc_fp;    /* offset  88 — x29, frame pointer */
+    long mc_lr;    /* offset  96 — x30, link register */
+    long mc_sp;    /* offset 104 — stack pointer */
+    long mc_pc;    /* offset 112 — program counter / jump target */
+    long mc_spare[8];
+};
+
+struct ucontext {
+    sigset_t         uc_sigmask;
+    mctx             uc_mcontext;
+    struct __ucontext *uc_link;
+    stack_t          uc_stack;
+    int              __spare__[8];
+};
+
+#ifdef __cplusplus
+}
+#endif
+""")
+
+          # Context.c — ARM64 makecontext / swapcontext
+          with open(f'{platform}/Context.c', 'w') as f:
+              f.write("""\
+#include <string.h>
+#include "Context.h"
+
+void
+makecontext(uctx *ucp, void (*func)(void), intptr_t arg)
+{
+    long *sp;
+    memset(&ucp->uc_mcontext, 0, sizeof(ucp->uc_mcontext));
+    ucp->uc_mcontext.mc_x0 = (long)arg;
+    sp = (long*)((char*)ucp->uc_stack.ss_sp + ucp->uc_stack.ss_size);
+    sp = (long*)((uintptr_t)sp & ~15UL); /* 16-align */
+    ucp->uc_mcontext.mc_sp = (long)sp;
+    ucp->uc_mcontext.mc_pc = (long)func;
+}
+
+int
+swapcontext(uctx *oucp, const uctx *ucp)
+{
+    if (getcontext(oucp) == 0)
+        setcontext(ucp);
+    return 0;
+}
+""")
+
+          # asm.s — ARM64 _getmcontext / _setmcontext
+          # Offsets match struct mcontext above.
+          with open(f'{platform}/asm.s', 'w') as f:
+              f.write("""\
+.globl _getmcontext
+_getmcontext:
+    /* x0 = pointer to mcontext */
+    stp x19, x20, [x0, #8]     /* mc_x19, mc_x20 */
+    stp x21, x22, [x0, #24]    /* mc_x21, mc_x22 */
+    stp x23, x24, [x0, #40]    /* mc_x23, mc_x24 */
+    stp x25, x26, [x0, #56]    /* mc_x25, mc_x26 */
+    stp x27, x28, [x0, #72]    /* mc_x27, mc_x28 */
+    stp x29, x30, [x0, #88]    /* mc_fp,  mc_lr  */
+    mov x1, sp
+    str x1,  [x0, #104]        /* mc_sp */
+    str x30, [x0, #112]        /* mc_pc = lr (resume address) */
+    mov x1, #1
+    str x1,  [x0, #0]          /* mc_x0 = 1 so restoration returns 1 */
+    mov x0, #0                 /* first call returns 0 */
+    ret
+
+.globl _setmcontext
+_setmcontext:
+    /* x0 = pointer to mcontext */
+    ldr x1, [x0, #104]         /* mc_sp */
+    ldr x2, [x0, #112]         /* mc_pc */
+    ldp x19, x20, [x0, #8]
+    ldp x21, x22, [x0, #24]
+    ldp x23, x24, [x0, #40]
+    ldp x25, x26, [x0, #56]
+    ldp x27, x28, [x0, #72]
+    ldp x29, x30, [x0, #88]    /* fp, lr */
+    ldr x0,  [x0, #0]          /* mc_x0 — load last (base reg) */
+    mov sp, x1
+    br  x2
+""")
+
+          print("All ARM64 patches applied successfully.")
           EOF
 
       - name: Build
