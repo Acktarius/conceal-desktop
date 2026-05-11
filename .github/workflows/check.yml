@@ -373,6 +373,14 @@ jobs:
           with open(path, 'w') as f:
               f.write(patched)
 
+          # asm.s is x86-64 only; on ARM64 macOS the system libsystem_platform
+          # already provides _setmcontext/_getmcontext for ucontext functions
+          import os
+          asm = 'cryptonote/src/Platform/OSX/System/asm.s'
+          if os.path.exists(asm):
+              os.remove(asm)
+              print(f"Removed {asm} (x86-64 only, system provides ARM64 equivalent)")
+
           print("Patches applied successfully.")
           EOF
 
