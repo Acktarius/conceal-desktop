@@ -24,7 +24,7 @@ jobs:
       - name: Patch cryptonote for macOS ARM64
         run: |
           python3 - <<'EOF'
-          import re
+          import re, sys
 
           # hw_detect.hpp: wrap Linux-only headers with #ifdef __linux__
           path = 'cryptonote/src/crypto/pow_hash/hw_detect.hpp'
@@ -37,16 +37,21 @@ jobs:
           with open(path, 'w') as f:
               f.write(content)
 
-          # cn_slow_hash.hpp: replace getauxval() check with always-true on Apple Silicon
+          # cn_slow_hash.hpp: replace the HAS_ARM_HW hw_check_aes() body using regex
+          # (whitespace-agnostic to handle any indentation style in the source)
           path = 'cryptonote/src/crypto/pow_hash/cn_slow_hash.hpp'
           with open(path, 'r') as f:
               content = f.read()
-          content = content.replace(
-              ' return (getauxval(AT_HWCAP) & HWCAP_AES) != 0;',
-              '#ifdef __linux__\n return (getauxval(AT_HWCAP) & HWCAP_AES) != 0;\n#else\n return true; // Apple Silicon always has AES hardware\n#endif'
+          patched, n = re.subn(
+              r'(\s*)return\s*\(getauxval\(AT_HWCAP\)\s*&\s*HWCAP_AES\)\s*!=\s*0\s*;',
+              '\n#ifdef __linux__\n\\1return (getauxval(AT_HWCAP) & HWCAP_AES) != 0;\n#else\n\\1return true; // Apple Silicon always has AES hardware\n#endif',
+              content
           )
+          if n == 0:
+              print("ERROR: cn_slow_hash.hpp pattern not found", file=sys.stderr)
+              sys.exit(1)
           with open(path, 'w') as f:
-              f.write(content)
+              f.write(patched)
 
           print("Patches applied successfully.")
           EOF
